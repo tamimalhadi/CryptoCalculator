@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Coin Profit Calculator</title>
+<style>
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+  body {
+    font-family: Arial, sans-serif;
+    background: #0b0e11;
+    color: #eaecef;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  .app {
+    background: #181a20;
+    padding: 24px;
+    border-radius: 12px;
+    width: 100%;
+    max-width: 420px;
+    box-shadow: 0 0 20px rgba(0,0,0,0.4);
+  }
+  h2 {
+    color: #f0b90b;
+    text-align: center;
+    margin-bottom: 20px;
+    font-size: 24px;
+  }
+  .searchContainer { 
+    position: relative;
+    margin-bottom: 15px;
+  }
+  #search {
+    width: 100%;
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid #2b3139;
+    background: #0b0e11;
+    color: #eaecef;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.3s;
+  }
+  #search:focus {
+    border-color: #f0b90b;
+  }
+  #coinList {
+    display: none;
+    position: absolute;
+    background: #1e2329;
+    border: 1px solid #2b3139;
+    width: 100%;
+    max-height: 250px;
+    overflow-y: auto;
+    border-radius: 8px;
+    z-index: 10;
+    margin-top: 4px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  }
+  .coinItem {
+    padding: 12px;
+    cursor: pointer;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    display: flex;
+    justify-content: space-between;
+    transition: background 0.2s;
+  }
+  .coinItem:hover {
+    background: #f0b90b;
+    color: #000;
+  }
+  .coinSymbol {
+    font-weight: 600;
+  }
+  .coinPrice {
+    color: #848e9c;
+    font-size: 13px;
+  }
+  .coinItem:hover .coinPrice {
+    color: #000;
+  }
+  label {
+    display: block;
+    margin-top: 15px;
+    margin-bottom: 6px;
+    font-size: 14px;
+    color: #848e9c;
+  }
+  input[type=number] {
+    width: 100%;
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid #2b3139;
+    background: #0b0e11;
+    color: #eaecef;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.3s;
+  }
+  input[type=number]:focus {
+    border-color: #f0b90b;
+  }
+  button {
+    width: 100%;
+    margin-top: 20px;
+    padding: 14px;
+    border: none;
+    border-radius: 8px;
+    background: #f0b90b;
+    color: #000;
+    font-weight: bold;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background 0.3s;
+  }
+  button:hover {
+    background: #fcd535;
+  }
+  button:active {
+    transform: scale(0.98);
+  }
+  .result {
+    margin-top: 20px;
+    padding: 16px;
+    border-radius: 8px;
+    background: #0b0e11;
+    font-size: 14px;
+    line-height: 1.8;
+  }
+  .result b {
+    color: #848e9c;
+  }
+  .profit { 
+    color: #0ecb81; 
+    font-weight: bold;
+  }
+  .loss { 
+    color: #f6465d; 
+    font-weight: bold;
+  }
+  .chartContainer {
+    margin-top: 15px;
+    height: 200px;
+    background: #181a20;
+    border-radius: 8px;
+    padding: 15px;
+    display: none;
+  }
+  .chartContainer.show {
+    display: block;
+  }
+  canvas {
+    width: 100% !important;
+    height: 100% !important;
+  }
+  @media (max-width: 480px) {
+    .app {
+      padding: 20px;
+    }
+    h2 {
+      font-size: 20px;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <h2>
+    <img src="logo.png" alt="Logo" style="width: 28px; height: 28px; vertical-align: middle; margin-right: 8px; object-fit: contain;">
+    Coin Profit Calculator
+  </h2>
+
+  <div class="searchContainer">
+    <input id="search" type="text" placeholder="Click to search coin...">
+    <div id="coinList"></div>
+  </div>
+
+  <label>Today Price (USDT)</label>
+  <input id="today" type="number" step="any" placeholder="Auto-filled when coin selected">
+
+  <label>Next Day Price (USDT)</label>
+  <input id="next" type="number" step="any" placeholder="Enter next day price">
+
+  <label>Investment (Taka)</label>
+  <input id="invest" type="number" step="any" placeholder="Enter amount in Taka">
+
+  <button id="calcBtn">Calculate Profit/Loss</button>
+
+  <div class="result" id="result">Select a coin to start calculating.</div>
+  
+  <div class="chartContainer" id="chartContainer">
+    <canvas id="profitChart"></canvas>
+  </div>
+</div>
+
+<script>
+const search = document.getElementById('search');
+const coinList = document.getElementById('coinList');
+const today = document.getElementById('today');
+const next = document.getElementById('next');
+const invest = document.getElementById('invest');
+const calcBtn = document.getElementById('calcBtn');
+const result = document.getElementById('result');
+const chartContainer = document.getElementById('chartContainer');
+
+let allCoins = [];
+let selectedCoin = '';
+
+async function loadCoins() {
+  try {
+    const res = await fetch('https://api.binance.com/api/v3/ticker/price');
+    const data = await res.json();
+    allCoins = data.filter(c => c.symbol.endsWith('USDT'));
+  } catch {
+    allCoins = [
+      {symbol:'BTCUSDT', price:'68000'},
+      {symbol:'ETHUSDT', price:'3500'},
+      {symbol:'BNBUSDT', price:'580'},
+      {symbol:'SOLUSDT', price:'150'}
+    ];
+  }
+}
+
+function renderList(list) {
+  coinList.innerHTML = '';
+  if (list.length === 0) {
+    coinList.innerHTML = '<div style="padding: 12px; color: #848e9c; text-align: center;">No coins found</div>';
+    return;
+  }
+  list.slice(0, 30).forEach(c => {
+    const div = document.createElement('div');
+    div.className = 'coinItem';
+    const price = parseFloat(c.price);
+    const priceStr = price >= 1 ? price.toFixed(2) : price.toFixed(6);
+    div.innerHTML = `
+      <span class="coinSymbol">${c.symbol}</span>
+      <span class="coinPrice">$${priceStr}</span>
+    `;
+    div.onclick = () => {
+      selectedCoin = c.symbol;
+      search.value = c.symbol;
+      today.value = parseFloat(c.price).toFixed(8);
+      coinList.style.display = 'none';
+      result.innerHTML = `Selected: <b style="color: #f0b90b;">${c.symbol}</b> — Ready to calculate!`;
+      chartContainer.classList.remove('show');
+    };
+    coinList.appendChild(div);
+  });
+}
+
+search.addEventListener('focus', () => {
+  coinList.style.display = 'block';
+  const q = search.value.trim().toUpperCase();
+  if (q) {
+    const filtered = allCoins.filter(c => c.symbol.includes(q));
+    renderList(filtered);
+  } else {
+    renderList(allCoins);
+  }
+});
+
+search.addEventListener('input', () => {
+  const q = search.value.trim().toUpperCase();
+  const filtered = allCoins.filter(c => c.symbol.includes(q));
+  renderList(filtered);
+  coinList.style.display = 'block';
+});
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.searchContainer')) {
+    coinList.style.display = 'none';
+  }
+});
+
+calcBtn.onclick = () => {
+  const t = parseFloat(today.value);
+  const n = parseFloat(next.value);
+  const inv = parseFloat(invest.value);
+  
+  if (!t || !n) { 
+    result.innerHTML = "⚠️ Please enter valid prices."; 
+    chartContainer.classList.remove('show');
+    return; 
+  }
+  
+  const diff = n - t;
+  const percent = (diff / t) * 100;
+  const cls = percent >= 0 ? 'profit' : 'loss';
+  const profitAmt = inv ? (inv * percent / 100) : 0;
+  const finalValue = inv ? (inv + profitAmt) : 0;
+  
+  let html = `<b>Coin:</b> ${selectedCoin || 'Custom'}<br>`;
+  html += `<b>Price Change:</b> <span class="${cls}">${percent >= 0 ? '+' : ''}${percent.toFixed(2)}%</span><br>`;
+  
+  if (inv) {
+    html += `<b>Investment:</b> ৳${inv.toFixed(2)}<br>`;
+    html += `<b>Profit/Loss:</b> <span class="${cls}">${profitAmt >= 0 ? '+' : ''}৳${profitAmt.toFixed(2)}</span><br>`;
+    html += `<b>Final Value:</b> ৳${finalValue.toFixed(2)}`;
+  }
+  
+  result.innerHTML = html;
+  
+  if (inv) {
+    chartContainer.classList.add('show');
+    drawChart(inv, profitAmt, finalValue, percent >= 0);
+  } else {
+    chartContainer.classList.remove('show');
+  }
+};
+
+function drawChart(investment, profit, finalValue, isProfit) {
+  const canvas = document.getElementById('profitChart');
+  const ctx = canvas.getContext('2d');
+  
+  canvas.width = canvas.offsetWidth;
+  canvas.height = canvas.offsetHeight;
+
+  const width = canvas.width;
+  const height = canvas.height;
+  const padding = 30;
+  const barWidth = 60;
+  const maxValue = Math.max(investment, Math.abs(profit), finalValue) * 1.2;
+
+  ctx.clearRect(0, 0, width, height);
+
+  // Draw grid
+  ctx.strokeStyle = '#2b3139';
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = padding + (height - 2 * padding) * (i / 4);
+    ctx.beginPath();
+    ctx.moveTo(padding, y);
+    ctx.lineTo(width - padding, y);
+    ctx.stroke();
+  }
+
+  const bars = [
+    { label: 'Investment', value: investment, color: '#848e9c' },
+    { label: 'Profit/Loss', value: profit, color: isProfit ? '#0ecb81' : '#f6465d' },
+    { label: 'Final', value: finalValue, color: '#f0b90b' }
+  ];
+
+  const spacing = (width - 2 * padding) / bars.length;
+
+  bars.forEach((bar, i) => {
+    const x = padding + spacing * i + spacing / 2 - barWidth / 2;
+    const barHeight = (Math.abs(bar.value) / maxValue) * (height - 2 * padding - 20);
+    const y = height - padding - barHeight;
+
+    // Draw bar
+    ctx.fillStyle = bar.color;
+    ctx.fillRect(x, y, barWidth, barHeight);
+
+    // Draw label
+    ctx.fillStyle = '#eaecef';
+    ctx.font = '11px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(bar.label, x + barWidth / 2, height - padding + 15);
+
+    // Draw value
+    ctx.fillStyle = bar.color;
+    ctx.font = 'bold 12px Arial';
+    const valueText = `৳${Math.abs(bar.value).toFixed(0)}`;
+    ctx.fillText(valueText, x + barWidth / 2, y - 8);
+  });
+}
+
+window.addEventListener('resize', () => {
+  if (chartContainer.classList.contains('show')) {
+    const inv = parseFloat(invest.value);
+    const t = parseFloat(today.value);
+    const n = parseFloat(next.value);
+    const percent = ((n - t) / t) * 100;
+    const profitAmt = (inv * percent / 100);
+    const finalValue = inv + profitAmt;
+    drawChart(inv, profitAmt, finalValue, percent >= 0);
+  }
+});
+
+loadCoins();
+</script>
+</body>
+</html>
